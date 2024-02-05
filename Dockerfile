@@ -1,13 +1,20 @@
-FROM ubuntu:latest
+FROM golang:1.17 AS builder
+WORKDIR /app
+COPY main.go go.mod go.sum ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o app .
 
-# Update package lists and install Apache
-RUN apt-get update && \
-    apt-get install -y apache2 && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+FROM alpine:latest
 
-# Expose port 80 for incoming HTTP traffic
-EXPOSE 80
+RUN apk update \
+	&& apk add ca-certificates tzdata \
+	&& update-ca-certificates \
+	&& apk add shadow \
+	&& groupadd -r app \
+	&& useradd -r -g app -s /sbin/nologin -c "Docker image user" app
 
-# Start Apache in the foreground when the container starts
-CMD ["apache2ctl", "-D", "FOREGROUND"]
+USER app
+WORKDIR /app
+
+COPY --from=builder /app/app ./app
+EXPOSE 3000
+CMD ["./app"]
